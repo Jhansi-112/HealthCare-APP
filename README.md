@@ -1,1 +1,1 @@
-# HeathCare-APP
+# HealthCare-APP
