@@ -71,14 +71,13 @@ jobs:
         timeout-minutes: 1
         env:
           CHANGED_SERVICES: ${{ steps.filter.outputs.changes }}
-          SERVICE_COUNT: ${{ steps.filter.outputs.count }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo 'services=["appointment-service","doctor-service","patient-service","report-service","user-service"]' >> "$GITHUB_OUTPUT"
             echo 'service_count=5' >> "$GITHUB_OUTPUT"
           else
             echo "services=${CHANGED_SERVICES:-[]}" >> "$GITHUB_OUTPUT"
-            echo "service_count=${SERVICE_COUNT:-0}" >> "$GITHUB_OUTPUT"
+            echo "service_count=$(echo "${CHANGED_SERVICES:-[]}" | jq length)" >> "$GITHUB_OUTPUT"
           fi
 
   unit-test:
