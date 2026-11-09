@@ -1,8 +1,0 @@
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/security/JwtUtil.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/security/SecurityConfig.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/model/Role.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/model/UserEntity.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/service/UserService.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/controller/AuthController.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/repository/UserRepository.java
-/Users/ankitshukla/healthcare-microservices/user-service/src/main/java/com/healthcare/user/UserServiceApplication.java
