@@ -1,0 +1,198 @@
+name: HealthCare Path CI - Jhansi
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "healthcare-microservices/appointment-service/**"
+      - "healthcare-microservices/doctor-service/**"
+      - "healthcare-microservices/patient-service/**"
+      - "healthcare-microservices/report-service/**"
+      - "healthcare-microservices/user-service/**"
+      - ".github/workflows/healthcare-path-ci.yml"
+  pull_request:
+    paths:
+      - "healthcare-microservices/appointment-service/**"
+      - "healthcare-microservices/doctor-service/**"
+      - "healthcare-microservices/patient-service/**"
+      - "healthcare-microservices/report-service/**"
+      - "healthcare-microservices/user-service/**"
+      - ".github/workflows/healthcare-path-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  JAVA_VERSION: "17"
+  SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
+
+jobs:
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      services: ${{ steps.service-matrix.outputs.services }}
+      service_count: ${{ steps.service-matrix.outputs.service_count }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Detect changed service paths
+        id: filter
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: dorny/paths-filter@v3
+        timeout-minutes: 3
+        with:
+          filters: |
+            appointment-service:
+              - "healthcare-microservices/appointment-service/**"
+              - ".github/workflows/healthcare-path-ci.yml"
+            doctor-service:
+              - "healthcare-microservices/doctor-service/**"
+              - ".github/workflows/healthcare-path-ci.yml"
+            patient-service:
+              - "healthcare-microservices/patient-service/**"
+              - ".github/workflows/healthcare-path-ci.yml"
+            report-service:
+              - "healthcare-microservices/report-service/**"
+              - ".github/workflows/healthcare-path-ci.yml"
+            user-service:
+              - "healthcare-microservices/user-service/**"
+              - ".github/workflows/healthcare-path-ci.yml"
+
+      - name: Build service matrix
+        id: service-matrix
+        timeout-minutes: 1
+        env:
+          CHANGED_SERVICES: ${{ steps.filter.outputs.changes }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'services=["appointment-service","doctor-service","patient-service","report-service","user-service"]' >> "$GITHUB_OUTPUT"
+            echo 'service_count=5' >> "$GITHUB_OUTPUT"
+          else
+            echo "services=${CHANGED_SERVICES:-[]}" >> "$GITHUB_OUTPUT"
+            echo "service_count=$(echo "${CHANGED_SERVICES:-[]}" | jq length)" >> "$GITHUB_OUTPUT"
+          fi
+
+  unit-test:
+    name: Unit tests - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.service_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    defaults:
+      run:
+        working-directory: healthcare-microservices/${{ matrix.service }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        timeout-minutes: 5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Run unit tests
+        timeout-minutes: 10
+        run: mvn -B -ntp test
+
+  sonar:
+    name: Sonar analysis - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - detect-changes
+      - unit-test
+    if: ${{ needs.detect-changes.outputs.service_count != '0' }}
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    defaults:
+      run:
+        working-directory: healthcare-microservices/${{ matrix.service }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21 for Sonar
+        uses: actions/setup-java@v4
+        timeout-minutes: 5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run tests and Sonar analysis
+        if: ${{ env.SONAR_TOKEN != '' }}
+        timeout-minutes: 15
+        run: >
+          mvn -B -ntp verify
+          org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
+          -Dsonar.projectKey=${{ env.SONAR_ORGANIZATION }}_${{ matrix.service }}
+          -Dsonar.projectName=${{ matrix.service }}
+
+      - name: Skip Sonar analysis
+        if: ${{ env.SONAR_TOKEN == '' }}
+        timeout-minutes: 1
+        run: echo "SONAR_TOKEN is not configured; skipping Sonar analysis."
+
+  docker-push:
+    name: Docker push - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - detect-changes
+      - unit-test
+      - sonar
+    if: ${{ needs.detect-changes.outputs.service_count != '0' && github.event_name != 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        timeout-minutes: 5
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        timeout-minutes: 5
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        timeout-minutes: 15
+        with:
+          context: ./healthcare-microservices/${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/healthcare-${{ matrix.service }}:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/healthcare-${{ matrix.service }}:latest
