@@ -178,3 +178,7 @@ Each stage was tracked as a Jira ticket under the epic **CI Pipeline – HealthC
 - Add Snyk for dependency scanning.
 - Use ephemeral runners and a cleanup step for old Docker images.
 - Add the CD part (deploy to Kubernetes).
+
+## Project tracking
+
+Tracked in Jira: epic **CP-1 CI Pipeline – HealthCare-APP**, with one ticket per stage.
